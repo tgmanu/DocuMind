@@ -77,4 +77,4 @@ documind/
 
 ## Live Demo
 
-[DocuMind on Streamlit Cloud](https://your-app.streamlit.app)
+[DocuMind on Streamlit Cloud](https://docu-mind-ai-chatbot.streamlit.app)
