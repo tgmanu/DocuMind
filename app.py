@@ -68,9 +68,17 @@ with st.sidebar:
     top_k        = st.slider("Chunks to retrieve (top-k)", 2, 8, 4)
     show_sources = st.toggle("Show sources", value=True)
 
+    # Clear only the conversation
     if st.button("Clear chat", use_container_width=True):
         st.session_state.messages = []
-        st.session_state.history  = []
+        st.session_state.history = []
+        st.rerun()
+
+# Reset database (remove indexed PDFs)
+    if st.button("Reset database", use_container_width=True):
+        import shutil
+        shutil.rmtree("/tmp/chroma_db", ignore_errors=True)
+        st.success("All indexed PDFs cleared")
         st.rerun()
 
 # ── main area ─────────────────────────────────────────────
