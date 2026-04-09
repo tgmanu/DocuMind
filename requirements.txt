@@ -7,3 +7,9 @@ langchain-text-splitters
 langchain-experimental
 langchain-huggingface
 python-dotenv
+
+chromadb==0.4.24
+protobuf==3.20.3
+opentelemetry-api==1.22.0
+opentelemetry-sdk==1.22.0
+numpy==1.26.4
