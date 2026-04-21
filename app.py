@@ -1,20 +1,16 @@
 import streamlit as st
 import uuid
 import os
-import shutil
 from dotenv import load_dotenv
 
 load_dotenv()
 
-st.set_page_config(page_title="DocuMind", page_icon="pdficon.png", layout="wide")
 
-# ── session bootstrap ─────────────────────────────────────
-# A fresh session_id is generated once per browser session.
-# On reset, we replace it with a new UUID so the DB path changes
-# and ChromaDB is forced to create a brand-new client.
+st.set_page_config(page_title="RAG-PDF-Assistant", page_icon="pdficon.png", layout="wide")
+
+# Initialize session
 if "session_id" not in st.session_state:
     st.session_state.session_id = str(uuid.uuid4())
-    st.session_state.db_initialised = False   # flag: haven't cleaned up yet
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -22,21 +18,11 @@ if "messages" not in st.session_state:
 if "history" not in st.session_state:
     st.session_state.history = []
 
-# ── DB path tied to session_id ────────────────────────────
+# ALWAYS define DB_PATH (outside condition)
 DB_PATH = f"/tmp/chroma_db_{st.session_state.session_id}"
-os.environ["CHROMA_DB_PATH"] = DB_PATH
 
-# ── one-time startup cleanup ──────────────────────────────
-# On the very first run of a new session we wipe every stale
-# chroma_db_* folder left in /tmp so we always start clean.
-if not st.session_state.get("db_initialised", False):
-    for entry in os.listdir("/tmp"):
-        if entry.startswith("chroma_db_") and entry != os.path.basename(DB_PATH):
-            try:
-                shutil.rmtree(f"/tmp/{entry}", ignore_errors=True)
-            except Exception:
-                pass
-    st.session_state.db_initialised = True
+# Make it available to other files (rag.py, ingest.py)
+os.environ["CHROMA_DB_PATH"] = DB_PATH
 
 import tempfile
 from ingest import ingest, get_indexed_files, get_collection
@@ -44,7 +30,7 @@ from rag import query_with_history
 
 # ── sidebar ───────────────────────────────────────────────
 with st.sidebar:
-    st.title("DocuMind")
+    st.title("RAG-PDF-Assistant")
     st.caption("Local RAG — runs fully on your machine")
     st.divider()
 
@@ -62,6 +48,7 @@ with st.sidebar:
 
             with st.spinner(f"Indexing {uploaded.name}..."):
                 try:
+                    # pass original filename as display_name
                     ingest(tmp_path, force=reindex_btn, display_name=uploaded.name)
                     st.session_state.messages = []
                     st.session_state.history  = []
@@ -72,7 +59,7 @@ with st.sidebar:
                 finally:
                     os.unlink(tmp_path)
 
-    # Show indexed PDFs
+    # Show indexed PDFs — use display_name which is the clean original name
     st.divider()
     st.subheader("Indexed PDFs")
     indexed = get_indexed_files()
@@ -83,7 +70,7 @@ with st.sidebar:
     else:
         st.info("No PDFs indexed yet")
 
-    # Search scope
+    # Search scope — filter by display_name
     st.divider()
     st.subheader("Search scope")
     search_all    = st.toggle("Search ALL PDFs", value=True)
@@ -91,39 +78,31 @@ with st.sidebar:
     if not search_all and indexed:
         labels        = sorted(list(indexed))
         chosen        = st.selectbox("Pick a PDF to search", labels)
-        selected_file = chosen
+        selected_file = chosen   # this is already the display_name
 
     st.divider()
     st.subheader("Settings")
     top_k        = st.slider("Chunks to retrieve (top-k)", 2, 8, 4)
     show_sources = st.toggle("Show sources", value=True)
 
-    # ── Clear chat ────────────────────────────────────────
+    # Clear only the conversation
     if st.button("Clear chat", use_container_width=True):
         st.session_state.messages = []
-        st.session_state.history  = []
+        st.session_state.history = []
         st.rerun()
 
-    # ── Reset database ────────────────────────────────────
+# Reset database (remove indexed PDFs)
     if st.button("Reset database", use_container_width=True):
-        # 1. Delete the ChromaDB folder on disk
+        import shutil
+
+    # 1. Delete DB
         shutil.rmtree(DB_PATH, ignore_errors=True)
-
-        # 2. Assign a brand-new session_id so the next DB_PATH is fresh
-        #    and ChromaDB won't reuse any cached client pointing to the
-        #    deleted folder.
-        st.session_state.session_id   = str(uuid.uuid4())
-        st.session_state.db_initialised = True   # skip cleanup scan on rerun
-
-        # 3. Clear conversation
+        
+    # 4. Clear chat
         st.session_state.messages = []
-        st.session_state.history  = []
+        st.session_state.history = []
 
-        # 4. Update the env var immediately so ingest/rag pick up new path
-        new_db_path = f"/tmp/chroma_db_{st.session_state.session_id}"
-        os.environ["CHROMA_DB_PATH"] = new_db_path
-
-        st.success("Database reset — all PDFs removed.")
+        st.success("Database reset successfully")
         st.rerun()
 
 # ── main area ─────────────────────────────────────────────
